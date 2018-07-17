@@ -21,19 +21,31 @@ from graphql.execution import ExecutionResult
 from agora_graphql.gql.executor import AgoraExecutor
 from agora_graphql.gql.middleware import AgoraMiddleware
 
+from expiringdict import ExpiringDict
+
+from agora_graphql.gql.schema import create_gql_schema
+
 __author__ = 'Fernando Serena'
 
 
 class GraphQLProcessor(object):
-    def __init__(self, gateway):
+    def __init__(self, gateway, schema_path=None, data_gw_cache=None):
         self.__gateway = gateway
 
-        with open('./schema.graphqls') as source:
-            document = parse(source.read())
+        if schema_path:
+            with open(schema_path) as f:
+                source = f.read()
+        else:
+            self.__schema_source = create_gql_schema(gateway)
+            source = self.__schema_source
+
+        document = parse(source)
         self.__schema = build_ast_schema(document)
 
         self.__executor = AgoraExecutor(gateway)
-        self.__middleware = MiddlewareManager(AgoraMiddleware(gateway))
+
+        self.expiring_dict = ExpiringDict(**data_gw_cache) if data_gw_cache else None
+        self.__middleware = MiddlewareManager(AgoraMiddleware(gateway, data_gw_cache=self.expiring_dict))
 
     @property
     def middleware(self):

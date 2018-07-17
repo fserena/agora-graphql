@@ -23,21 +23,42 @@ from agora import Agora, setup_logging
 
 from agora_graphql.server import build
 
-setup_logging(logging.DEBUG)
+__author__ = 'Fernando Serena'
 
 REQUEST_TIMEOUT = int(os.environ.get('REQUEST_TIMEOUT', 300))
 API_PORT = int(os.environ.get('API_PORT', 5010))
+SCHEMA_PATH = os.environ.get('SCHEMA_PATH', None)
+LOG_LEVEL = int(os.environ.get('LOG_LEVEL', logging.DEBUG))
+GATEWAY_HOST = os.environ.get('GATEWAY_HOST', 'localhost')
+GATEWAY_PORT = os.environ.get('GATEWAY_PORT', 8000)
+DATA_CACHE_HOST = os.environ.get('DATA_CACHE_HOST', 'localhost')
+DATA_CACHE_PORT = os.environ.get('DATA_CACHE_HOST', 6379)
+DATA_CACHE_ID = os.environ.get('DATA_CACHE_ID', 6)
+DATA_CACHE_GRAPH_LIMIT = os.environ.get('DATA_CACHE_GRAPH_LIMIT', 10000)
 
-__author__ = 'Fernando Serena'
+
+setup_logging(LOG_LEVEL)
 
 if __name__ == '__main__':
 
     graphql_config = {
-        'host': 'localhost',
-        'port': 8000,
-        'data_cache': {
-            'min_cache_time': 300,
-            'redis_file': 'cache.db'
+        'gateway': {
+            'host': GATEWAY_HOST,
+            'port': GATEWAY_PORT,
+            'data_cache': {
+                'min_cache_time': 300,
+                'redis_host': DATA_CACHE_HOST,
+                'redis_port': DATA_CACHE_PORT,
+                'redis_db': DATA_CACHE_ID,
+                'graph_memory_limit': DATA_CACHE_GRAPH_LIMIT
+            }
+        },
+        'schema': {
+            'path': SCHEMA_PATH
+        },
+        'gw_cache': {
+            'max_age_seconds': 300,
+            'max_len': DATA_CACHE_GRAPH_LIMIT
         }
     }
 

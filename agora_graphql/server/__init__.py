@@ -30,9 +30,10 @@ def build(**kwargs):
     app = Flask(__name__)
     CORS(app)
 
-    gw = Gateway(**kwargs)
+    schema_path = kwargs.get('schema', {}).get('path', None)
 
-    gql_processor = GraphQLProcessor(gw)
+    gw = Gateway(**kwargs['gateway'])
+    gql_processor = GraphQLProcessor(gw, schema_path, data_gw_cache=kwargs.get('gw_cache', None))
 
     app.add_url_rule('/graphql',
                      view_func=AgoraGraphQLView.as_view('graphql', schema=gql_processor.schema,
