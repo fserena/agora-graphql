@@ -2,7 +2,6 @@ requests
 futures
 python-dateutil
 graphql-core
-graphql-server-core
 Flask-Cors
 Flask-GraphQL
 agora-gw
