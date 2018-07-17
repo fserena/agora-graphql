@@ -17,11 +17,29 @@
 """
 from agora.engine.plan import AGP
 from graphql import parse
+from graphql.language.ast import Field
 from shortuuid import uuid
 
 from agora_graphql.misc import match
 
 __author__ = 'Fernando Serena'
+
+
+def identify_property(parent_type, p, fountain):
+    parent_props = fountain.get_type(parent_type)['properties']
+    try:
+        return match(p, parent_props).pop()
+    except IndexError:
+        pass
+
+
+def identify_parent_type(selection, fountain):
+    cand_parent_types = list(match(selection, fountain.types))
+    field_names = [f.name.value for f in selection.selection_set.selections if isinstance(f, Field)]
+
+    for t in cand_parent_types:
+        if all([identify_property(t, p, fountain) for p in field_names]):
+            return t
 
 
 def process_selection(fountain, selection, parent_var=None, parent_type=None, parent_prop=None, root_mode=True):
@@ -31,7 +49,7 @@ def process_selection(fountain, selection, parent_var=None, parent_type=None, pa
 
     try:
         if not parent_type:
-            ty = list(match(selection, fountain.types)).pop()
+            ty = identify_parent_type(selection, fountain)
             if ty:
                 if not parent_var:
                     var = '?v' + str(uuid())
@@ -81,4 +99,3 @@ def sparql_from_graphql(fountain, gql_query, root_mode=False):
     agp = AGP(set(tps), prefixes=fountain.prefixes)
     query = 'SELECT DISTINCT * WHERE {}'.format(agp)
     return query
-
