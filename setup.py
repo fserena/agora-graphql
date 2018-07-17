@@ -37,7 +37,7 @@ setup(
     download_url="https://github.com/fserena/agora-graphql/tarball/{}".format(metadata['version']),
     packages=find_packages(exclude=['ez_setup', 'examples', 'tests']),
     install_requires=['requests', 'futures', 'python-dateutil', 'graphql-core', 'graphql-server-core', 'Flask-Cors',
-                      'Flask-GraphQL', 'agora-gw', 'agora-wot', 'agora-py', 'shortuuid'],
+                      'Flask-GraphQL', 'agora-gw', 'agora-wot', 'agora-py', 'shortuuid', 'expiringdict'],
     classifiers=[],
     include_package_data=True,
     package_dir={'agora_graphql': 'agora_graphql'},
