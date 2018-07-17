@@ -15,49 +15,80 @@
   limitations under the License.
 #-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=#
 """
+import logging
 import traceback
+from threading import Lock
 
 from agora.engine.plan.agp import extend_uri
 from graphql import GraphQLNonNull, GraphQLList, GraphQLScalarType, GraphQLObjectType
-from rdflib import URIRef, BNode
+from rdflib import URIRef, BNode, Graph
+
 from agora_graphql.gql.data import data_graph
 from agora_graphql.misc import match
 
 __author__ = 'Fernando Serena'
 
+_lock = Lock()
+
+log = logging.getLogger('agora.gql.middleware')
+
 
 def load_resource(info, uri):
     uri = URIRef(uri)
-    if URIRef(uri) not in list(info.context['graph'].contexts()):
-        try:
-            g, headers = info.context['load_fn'](uri)
-        except Exception:
-            pass
-        info.context['graph'].get_context(uri).__iadd__(g)
-    return info.context['graph']
+    try:
+        g, headers = info.context['load_fn'](uri)
+    except Exception:
+        traceback.print_exc()
+        g = Graph()
+
+    return g
 
 
-def objects(info, elm, predicate):
-    if elm.startswith('_'):
-        elm = BNode(elm)
-    else:
-        elm = URIRef(elm)
-        load_resource(info, elm)
+def objects(cache, info, elm, predicate):
+    def uri_lock():
+        with _lock:
+            if elm not in info.context['locks']:
+                info.context['locks'][elm] = Lock()
+            return info.context['locks'][elm]
 
-    return map(lambda o: o.toPython(), info.context['graph'].objects(elm, URIRef(predicate)))
+    lock = uri_lock()
+    elm_key = elm.toPython() if not isinstance(elm, basestring) else elm
+    pred_key = predicate.toPython()
+    with lock:
+        if cache is None or elm_key not in cache or pred_key not in cache[elm_key]:
+            if elm.startswith('_'):
+                elm = BNode(elm)
+            else:
+                elm = URIRef(elm)
+                g = load_resource(info, elm)
+                if elm_key not in cache:
+                    cache[elm_key] = {'_g': g}
+
+            if pred_key not in cache[elm_key]:
+                res = map(lambda o: o.toPython(), cache[elm_key]['_g'].objects(elm, URIRef(predicate)))
+
+            if cache is not None:
+                cache[elm_key][pred_key] = res[:]
+        else:
+            res = cache[elm_key][pred_key][:]
+
+        return res
 
 
 class AgoraMiddleware(object):
-    def __init__(self, gateway):
+    def __init__(self, gateway, data_gw_cache=None):
         self.gateway = gateway
+        self.data_gw_cache = data_gw_cache
 
     def loader(self, dg):
         def wrapper(uri):
             if uri:
                 if self.gateway.data_cache is not None:
-                    return self.gateway.data_cache.create(gid=uri, loader=dg.loader, format='text/turtle')
+                    g = self.gateway.data_cache.create(gid=uri, loader=dg.loader, format='text/turtle')
                 else:
-                    return dg.loader(uri, format='text/turtle')
+                    g = dg.loader(uri, format='text/turtle')
+
+                return g
             else:
                 traceback.print_stack()
 
@@ -79,8 +110,10 @@ class AgoraMiddleware(object):
 
             if isinstance(return_type, GraphQLList):
                 if not root:
-                    dg = data_graph(info.context['query'], self.gateway, **args)
+                    dg = data_graph(info.context['query'], self.gateway, scholar=True, data_gw_cache=self.data_gw_cache,
+                                    **args)
                     info.context['load_fn'] = self.loader(dg)
+                    info.context['locks'] = {}
                     seeds = dg.roots
                 else:
                     seeds = []
@@ -88,7 +121,7 @@ class AgoraMiddleware(object):
                         try:
                             alias_prop = list(match(info.field_name, fountain.get_type(parent_ty)['properties'])).pop()
                             prop_uri = extend_uri(alias_prop, fountain.prefixes)
-                            seeds = objects(info, root, prop_uri)
+                            seeds = objects(self.data_gw_cache, info, root, prop_uri)
 
                             break
                         except IndexError:
@@ -104,7 +137,7 @@ class AgoraMiddleware(object):
                             alias_prop = list(match(info.field_name, fountain.get_type(parent_ty)['properties'])).pop()
                             prop_uri = URIRef(extend_uri(alias_prop, fountain.prefixes))
                             try:
-                                value = objects(info, root, prop_uri).pop()
+                                value = objects(self.data_gw_cache, info, root, prop_uri).pop()
 
                                 return value
                             except IndexError as e:
@@ -120,7 +153,7 @@ class AgoraMiddleware(object):
                             alias_prop = list(match(info.field_name, fountain.get_type(parent_ty)['properties'])).pop()
                             prop_uri = URIRef(extend_uri(alias_prop, fountain.prefixes))
                             try:
-                                uri = objects(info, root, prop_uri).pop()
+                                uri = objects(self.data_gw_cache, info, root, prop_uri).pop()
                                 if uri:
                                     return uri
                             except IndexError as e:
