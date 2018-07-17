@@ -34,8 +34,8 @@ class DataGraph(object):
 
     @property
     def roots(self):
-        gen = self.__data_gw.fragment(self.__sparql_query, **self.__kg_params)['generator']
-        return list(roots_gen(gen))
+        gen = self.__data_gw.fragment(self.__sparql_query, scholar=self.__scholar, **self.__kg_params)['generator']
+        return roots_gen(gen)
 
     @property
     def loader(self):
@@ -48,9 +48,23 @@ class DataGraph(object):
         dg.__agora = Agora(auto=False)
         dg.__agora.planner = Planner(dg.__gateway.agora.fountain)
         dg.__sparql_query = sparql_from_graphql(dg.__agora.fountain, dg.__gql_query, root_mode=True)
-        dg.__data_gw = dg.__gateway.data(dg.__sparql_query, serverless=True)
+        data_gw_cache = kwargs.get('data_gw_cache', None)
+
+        if data_gw_cache is None or dg.__gql_query not in data_gw_cache:
+            data_gw = dg.__gateway.data(dg.__sparql_query, serverless=True, static_fountain=True)
+        else:
+            data_gw = data_gw_cache[dg.__gql_query]
+
+        dg.__data_gw = data_gw
+
+        if data_gw_cache is not None:
+            data_gw_cache[dg.__gql_query] = data_gw
+
         if 'cache' in kwargs:
             del kwargs['cache']
+        if 'scholar' in kwargs:
+            dg.__scholar = bool(kwargs['scholar'])
+            del kwargs['scholar']
         dg.__kg_params = kwargs
 
         return dg
