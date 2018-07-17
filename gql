@@ -32,7 +32,7 @@ LOG_LEVEL = int(os.environ.get('LOG_LEVEL', logging.DEBUG))
 GATEWAY_HOST = os.environ.get('GATEWAY_HOST', 'localhost')
 GATEWAY_PORT = os.environ.get('GATEWAY_PORT', 8000)
 DATA_CACHE_HOST = os.environ.get('DATA_CACHE_HOST', 'localhost')
-DATA_CACHE_PORT = os.environ.get('DATA_CACHE_HOST', 6379)
+DATA_CACHE_PORT = int(os.environ.get('DATA_CACHE_PORT', 6379))
 DATA_CACHE_ID = os.environ.get('DATA_CACHE_ID', 6)
 DATA_CACHE_GRAPH_LIMIT = os.environ.get('DATA_CACHE_GRAPH_LIMIT', 10000)
 
