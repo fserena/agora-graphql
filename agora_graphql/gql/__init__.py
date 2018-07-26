@@ -15,14 +15,12 @@
   limitations under the License.
 #-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=#
 """
+from expiringdict import ExpiringDict
 from graphql import parse, build_ast_schema, MiddlewareManager, Source, validate, execute
 from graphql.execution import ExecutionResult
 
 from agora_graphql.gql.executor import AgoraExecutor
 from agora_graphql.gql.middleware import AgoraMiddleware
-
-from expiringdict import ExpiringDict
-
 from agora_graphql.gql.schema import create_gql_schema
 
 __author__ = 'Fernando Serena'
@@ -41,11 +39,22 @@ class GraphQLProcessor(object):
 
         document = parse(source)
         self.__schema = build_ast_schema(document)
+        abstract_types = filter(lambda x: hasattr(x, 'resolve_type'), dict(self.__schema.get_type_map()).values())
+        for at in abstract_types:
+            at.resolve_type = self.__resolve_type
 
         self.__executor = AgoraExecutor(gateway)
 
-        self.expiring_dict = ExpiringDict(**data_gw_cache) if data_gw_cache else None
-        self.__middleware = MiddlewareManager(AgoraMiddleware(gateway, data_gw_cache=self.expiring_dict))
+        if not data_gw_cache:
+            data_gw_cache = {'max_age_seconds': 300, 'max_len': 1000}
+
+        self.expiring_dict = ExpiringDict(**data_gw_cache)
+        middleware = AgoraMiddleware(gateway, data_gw_cache=self.expiring_dict)
+        self.__middleware = MiddlewareManager(middleware)
+
+    def __resolve_type(self, *args, **kwargs):
+        m = self.middleware.middlewares[0]
+        return m.resolve_type(*args, **kwargs)
 
     @property
     def middleware(self):
@@ -78,16 +87,16 @@ class GraphQLProcessor(object):
 
         try:
             return execute(self.__schema,
-                ast,
-                root_value=None,
-                variable_values={},
-                operation_name=None,
-                context_value= {
-                    'query': q,
-                    'introspection': 'introspection' in q.lower()
-                },
-                middleware=self.__middleware,
-                executor=self.__executor
-            )
+                           ast,
+                           root_value=None,
+                           variable_values={},
+                           operation_name=None,
+                           context_value={
+                               'query': q,
+                               'introspection': 'introspection' in q.lower()
+                           },
+                           middleware=self.__middleware,
+                           executor=self.__executor
+                           )
         except Exception as e:
             return ExecutionResult(errors=[e], invalid=True)
