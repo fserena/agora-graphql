@@ -20,8 +20,10 @@ import traceback
 from threading import Lock
 
 from agora.engine.plan.agp import extend_uri
-from graphql import GraphQLNonNull, GraphQLList, GraphQLScalarType, GraphQLObjectType
-from rdflib import URIRef, BNode, Graph
+from graphql import GraphQLNonNull, GraphQLList, GraphQLScalarType, GraphQLObjectType, GraphQLInterfaceType, \
+    GraphQLUnionType
+from graphql.language.ast import InlineFragment
+from rdflib import URIRef, BNode, Graph, RDF
 
 from agora_graphql.gql.data import data_graph
 from agora_graphql.misc import match
@@ -44,32 +46,30 @@ def load_resource(info, uri):
     return g
 
 
-def objects(cache, info, elm, predicate):
-    def uri_lock():
-        with _lock:
-            if elm not in info.context['locks']:
-                info.context['locks'][elm] = Lock()
-            return info.context['locks'][elm]
+def uri_lock(elm, info):
+    with _lock:
+        if elm not in info.context['locks']:
+            info.context['locks'][elm] = Lock()
+        return info.context['locks'][elm]
 
-    lock = uri_lock()
+
+def objects(cache, info, elm, predicate):
+    lock = uri_lock(elm, info)
     elm_key = elm.toPython() if not isinstance(elm, basestring) else elm
     pred_key = predicate.toPython()
     with lock:
-        if cache is None or elm_key not in cache or pred_key not in cache[elm_key]:
+        if elm_key not in cache:
+            cache[elm_key] = {'_g': load_resource(info, elm)}
+        if pred_key not in cache[elm_key]:
             if elm.startswith('_'):
                 elm = BNode(elm)
             else:
                 elm = URIRef(elm)
-                g = load_resource(info, elm)
-                if elm_key not in cache:
-                    cache[elm_key] = {'_g': g}
 
-            if pred_key not in cache[elm_key]:
-                res = map(lambda o: o.toPython(), cache[elm_key]['_g'].objects(elm, URIRef(predicate)))
+            res = map(lambda o: o.toPython(), cache[elm_key]['_g'].objects(elm, URIRef(predicate)))
+            cache[elm_key][pred_key] = res[:]
 
-            if cache is not None:
-                cache[elm_key][pred_key] = res[:]
-        else:
+        elif cache is not None:
             res = cache[elm_key][pred_key][:]
 
         return res
@@ -93,6 +93,48 @@ class AgoraMiddleware(object):
                 traceback.print_stack()
 
         return wrapper
+
+    def resolve_type(self, item, info):
+        lock = uri_lock(item, info)
+        with lock:
+            if item not in self.data_gw_cache:
+                self.data_gw_cache[item] = {'_g': load_resource(info, item)}
+            if 'type' not in self.data_gw_cache[item]:
+                g = self.data_gw_cache[item]['_g']
+                types = g.objects(URIRef(item), RDF.type)
+                types_n3 = set(map(lambda t: t.n3(g.namespace_manager), types))
+
+                res_type = None
+                if isinstance(info.return_type.of_type, GraphQLInterfaceType):
+                    interface_type = info.return_type.of_type.name
+                    corresponding_type = interface_type.lstrip('I')
+                    matching_types = set(match(corresponding_type, types_n3))
+                    if matching_types:
+                        inline_fragments = filter(lambda s: isinstance(s, InlineFragment),
+                                                  reduce(lambda x, y: x + y.selection_set.selections, info.field_asts,
+                                                         []))
+                        inline_types = map(lambda i: i.type_condition.name.value, inline_fragments)
+                        for it in inline_types:
+                            if match(it, types_n3):
+                                res_type = info.schema.get_type(it)
+                                break
+
+                else:
+                    union_types_dict = {x.name: x for x in info.return_type.of_type.types}
+                    matching_types = filter(lambda (_, m): m,
+                                            {t: match(t, types_n3) for t in union_types_dict.keys()}.items())
+
+                    try:
+                        res_type = union_types_dict[matching_types.pop()[0]]  # (name, ObjectType)
+                    except IndexError:
+                        pass
+                self.data_gw_cache[item]['type'] = res_type
+
+        return self.data_gw_cache[item]['type']
+
+    def __filter_abstract_seed(self, seed, info):
+        type = self.resolve_type(seed, info)
+        return type is not None
 
     def resolve(self, next, root, info, **args):
         if info.context['introspection']:
@@ -122,10 +164,13 @@ class AgoraMiddleware(object):
                             alias_prop = list(match(info.field_name, fountain.get_type(parent_ty)['properties'])).pop()
                             prop_uri = extend_uri(alias_prop, fountain.prefixes)
                             seeds = objects(self.data_gw_cache, info, root, prop_uri)
-
                             break
                         except IndexError:
                             pass
+
+                if isinstance(info.return_type.of_type, GraphQLInterfaceType) or isinstance(info.return_type.of_type,
+                                                                                            GraphQLUnionType):
+                    seeds = filter(lambda x: self.__filter_abstract_seed(x, info), seeds)
 
                 if seeds or non_nullable:
                     return seeds
