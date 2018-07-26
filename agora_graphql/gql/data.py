@@ -60,8 +60,8 @@ class DataGraph(object):
         if data_gw_cache is not None:
             data_gw_cache[dg.__gql_query] = data_gw
 
-        if 'cache' in kwargs:
-            del kwargs['cache']
+        if 'data_gw_cache' in kwargs:
+            del kwargs['data_gw_cache']
         if 'scholar' in kwargs:
             dg.__scholar = bool(kwargs['scholar'])
             del kwargs['scholar']

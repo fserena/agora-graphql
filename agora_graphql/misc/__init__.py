@@ -33,6 +33,6 @@ def build_id(s):
 
 
 def match(s, elms):
-    s = build_id(s)
-    m = filter(lambda e: e.endswith(s), elms)
+    s = build_id(s).lower()
+    m = filter(lambda e: e.lower().endswith(s), elms)
     return list(m)
