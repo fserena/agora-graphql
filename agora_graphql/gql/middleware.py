@@ -94,6 +94,15 @@ class AgoraMiddleware(object):
 
         return wrapper
 
+    def __check_matching_inline(self, info, types_n3):
+        inline_fragments = filter(lambda s: isinstance(s, InlineFragment),
+                                  reduce(lambda x, y: x + y.selection_set.selections, info.field_asts,
+                                         []))
+        inline_types = map(lambda i: i.type_condition.name.value, inline_fragments)
+        for it in inline_types:
+            if match(it, types_n3):
+                return info.schema.get_type(it)
+
     def resolve_type(self, item, info):
         lock = uri_lock(item, info)
         with lock:
@@ -110,24 +119,16 @@ class AgoraMiddleware(object):
                     corresponding_type = interface_type.lstrip('I')
                     matching_types = set(match(corresponding_type, types_n3))
                     if matching_types:
-                        inline_fragments = filter(lambda s: isinstance(s, InlineFragment),
-                                                  reduce(lambda x, y: x + y.selection_set.selections, info.field_asts,
-                                                         []))
-                        inline_types = map(lambda i: i.type_condition.name.value, inline_fragments)
-                        for it in inline_types:
-                            if match(it, types_n3):
-                                res_type = info.schema.get_type(it)
-                                break
+                        res_type = self.__check_matching_inline(info, types_n3)
 
                 else:
                     union_types_dict = {x.name: x for x in info.return_type.of_type.types}
                     matching_types = filter(lambda (_, m): m,
                                             {t: match(t, types_n3) for t in union_types_dict.keys()}.items())
 
-                    try:
-                        res_type = union_types_dict[matching_types.pop()[0]]  # (name, ObjectType)
-                    except IndexError:
-                        pass
+                    if matching_types:
+                        res_type = self.__check_matching_inline(info, types_n3)
+
                 self.data_gw_cache[item]['type'] = res_type
 
         return self.data_gw_cache[item]['type']
