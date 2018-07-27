@@ -3,7 +3,7 @@ futures
 python-dateutil
 graphql-core
 Flask-Cors
-Flask-GraphQL
+Flask-GraphQL>=2.0
 agora-gw
 agora-py
 agora-wot

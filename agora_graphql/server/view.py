@@ -20,14 +20,16 @@ from flask_graphql import GraphQLView
 
 __author__ = 'Fernando Serena'
 
+from flask import request
+
 
 class AgoraGraphQLView(GraphQLView):
     def __init__(self, **kwargs):
         super(AgoraGraphQLView, self).__init__(**kwargs)
 
-    def get_context(self, request):
+    def get_context(self):
         if request.method == 'GET':
-            gql_query = request.args.get('query')
+            gql_query = request.args.get('query') or ''
         else:
             gql_query = request.json['query']
 
