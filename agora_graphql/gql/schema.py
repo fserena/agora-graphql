@@ -51,6 +51,8 @@ def attr_type(fountain, p, all_type_names):
         value_type = p_range[0]
         if value_type.startswith('xsd'):
             value_type = title(value_type)
+            if value_type == 'Integer':
+                value_type = 'Int'
         else:
             value_type = 'String'
         return value_type
