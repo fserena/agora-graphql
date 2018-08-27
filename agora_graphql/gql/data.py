@@ -17,6 +17,9 @@
 """
 
 from agora import Agora, Planner
+from agora.collector.execution import parse_rdf
+from agora.collector.http import http_get, RDF_MIMES
+from rdflib import Graph, ConjunctiveGraph
 
 from agora_graphql.gql.sparql import sparql_from_graphql
 
@@ -39,7 +42,20 @@ class DataGraph(object):
 
     @property
     def loader(self):
-        return self.__data_gw.loader
+        def wrapper(uri, format):
+            result = self.__data_gw.loader(uri, format)
+            if result is None and self.__data_gw.loader != http_get:
+                for fmt in sorted(RDF_MIMES.keys(), key=lambda x: x != format):
+                    result = http_get(uri, format=fmt)
+                    if result is not None and not isinstance(result, bool):
+                        content, headers = result
+                        if not isinstance(content, Graph):
+                            g = ConjunctiveGraph()
+                            parse_rdf(g, content, fmt, headers)
+                            result = g, headers
+                        break
+            return result
+        return wrapper
 
     def __new__(cls, *args, **kwargs):
         dg = super(DataGraph, cls).__new__(cls)
@@ -51,9 +67,15 @@ class DataGraph(object):
         data_gw_cache = kwargs.get('data_gw_cache', None)
 
         if data_gw_cache is None or dg.__gql_query not in data_gw_cache:
-            data_gw = dg.__gateway.data(dg.__sparql_query, serverless=True, static_fountain=True)
+            data_gw = dg.__gateway.data(dg.__sparql_query, serverless=True, static_fountain=True,
+                                        server_name=kwargs.get('server_name', None), port=kwargs.get('port', None))
         else:
             data_gw = data_gw_cache[dg.__gql_query]
+
+        if 'server_name' in kwargs:
+            del kwargs['server_name']
+        if 'port' in kwargs:
+            del kwargs['port']
 
         dg.__data_gw = data_gw
 
@@ -65,6 +87,9 @@ class DataGraph(object):
         if 'scholar' in kwargs:
             dg.__scholar = bool(kwargs['scholar'])
             del kwargs['scholar']
+        else:
+            dg.__scholar = False
+
         dg.__kg_params = kwargs
 
         return dg
