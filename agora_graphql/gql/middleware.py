@@ -76,9 +76,10 @@ def objects(cache, info, elm, predicate):
 
 
 class AgoraMiddleware(object):
-    def __init__(self, gateway, data_gw_cache=None):
+    def __init__(self, gateway, data_gw_cache=None, **settings):
         self.gateway = gateway
         self.data_gw_cache = data_gw_cache
+        self.settings = settings.copy()
 
     def loader(self, dg):
         def wrapper(uri):
@@ -99,6 +100,8 @@ class AgoraMiddleware(object):
                                   reduce(lambda x, y: x + y.selection_set.selections, info.field_asts,
                                          []))
         inline_types = map(lambda i: i.type_condition.name.value, inline_fragments)
+        if not inline_types:
+            raise ValueError()
         for it in inline_types:
             if match(it, types_n3):
                 return info.schema.get_type(it)
@@ -119,7 +122,10 @@ class AgoraMiddleware(object):
                     corresponding_type = interface_type.lstrip('I')
                     matching_types = set(match(corresponding_type, types_n3))
                     if matching_types:
-                        res_type = self.__check_matching_inline(info, types_n3)
+                        try:
+                            res_type = self.__check_matching_inline(info, types_n3)
+                        except ValueError:
+                            res_type = info.schema.get_type(corresponding_type)
 
                 else:
                     union_types_dict = {x.name: x for x in info.return_type.of_type.types}
@@ -127,7 +133,10 @@ class AgoraMiddleware(object):
                                             {t: match(t, types_n3) for t in union_types_dict.keys()}.items())
 
                     if matching_types:
-                        res_type = self.__check_matching_inline(info, types_n3)
+                        try:
+                            res_type = self.__check_matching_inline(info, types_n3)
+                        except ValueError:
+                            pass
 
                 self.data_gw_cache[item]['type'] = res_type
 
@@ -153,8 +162,10 @@ class AgoraMiddleware(object):
 
             if isinstance(return_type, GraphQLList):
                 if not root:
-                    dg = data_graph(info.context['query'], self.gateway, scholar=True, data_gw_cache=self.data_gw_cache,
-                                    **args)
+                    data_graph_kwargs = args.copy()
+                    data_graph_kwargs.update(self.settings)
+                    dg = data_graph(info.context['query'], self.gateway, data_gw_cache=self.data_gw_cache,
+                                    **data_graph_kwargs)
                     info.context['load_fn'] = self.loader(dg)
                     info.context['locks'] = {}
                     seeds = dg.roots
