@@ -76,9 +76,10 @@ def objects(cache, info, elm, predicate):
 
 
 class AgoraMiddleware(object):
-    def __init__(self, gateway, data_gw_cache=None, **settings):
+    def __init__(self, gateway, data_gw_cache=None, follow_cycles=True, **settings):
         self.gateway = gateway
         self.data_gw_cache = data_gw_cache
+        self.follow_cycles = follow_cycles
         self.settings = settings.copy()
 
     def loader(self, dg):
@@ -165,6 +166,7 @@ class AgoraMiddleware(object):
                     data_graph_kwargs = args.copy()
                     data_graph_kwargs.update(self.settings)
                     dg = data_graph(info.context['query'], self.gateway, data_gw_cache=self.data_gw_cache,
+                                    follow_cycles=self.follow_cycles,
                                     **data_graph_kwargs)
                     info.context['load_fn'] = self.loader(dg)
                     info.context['locks'] = {}

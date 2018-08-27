@@ -37,7 +37,10 @@ class DataGraph(object):
 
     @property
     def roots(self):
-        gen = self.__data_gw.fragment(self.__sparql_query, scholar=self.__scholar, **self.__kg_params)['generator']
+        gen = self.__data_gw.fragment(self.__sparql_query,
+                                      scholar=self.__scholar,
+                                      follow_cycles=self.__follow_cycles,
+                                      **self.__kg_params)['generator']
         return roots_gen(gen)
 
     @property
@@ -55,6 +58,7 @@ class DataGraph(object):
                             result = g, headers
                         break
             return result
+
         return wrapper
 
     def __new__(cls, *args, **kwargs):
@@ -89,6 +93,12 @@ class DataGraph(object):
             del kwargs['scholar']
         else:
             dg.__scholar = False
+
+        if 'follow_cycles' in kwargs:
+            dg.__follow_cycles = kwargs['follow_cycles']
+            del kwargs['follow_cycles']
+        else:
+            dg.__follow_cycles = True
 
         dg.__kg_params = kwargs
 
