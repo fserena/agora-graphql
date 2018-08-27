@@ -27,7 +27,7 @@ __author__ = 'Fernando Serena'
 
 
 class GraphQLProcessor(object):
-    def __init__(self, gateway, schema_path=None, data_gw_cache=None):
+    def __init__(self, gateway, schema_path=None, data_gw_cache=None, **kwargs):
         self.__gateway = gateway
 
         if schema_path:
@@ -49,12 +49,16 @@ class GraphQLProcessor(object):
             data_gw_cache = {'max_age_seconds': 300, 'max_len': 1000}
 
         self.expiring_dict = ExpiringDict(**data_gw_cache)
-        middleware = AgoraMiddleware(gateway, data_gw_cache=self.expiring_dict)
+        middleware = AgoraMiddleware(gateway, data_gw_cache=self.expiring_dict, **kwargs)
         self.__middleware = MiddlewareManager(middleware)
 
     def __resolve_type(self, *args, **kwargs):
         m = self.middleware.middlewares[0]
         return m.resolve_type(*args, **kwargs)
+
+    @property
+    def schema_text(self):
+        return self.__schema_source
 
     @property
     def middleware(self):

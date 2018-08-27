@@ -17,14 +17,12 @@
 #-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=#
 """
 import logging
-import multiprocessing
 import os
 
-import gunicorn.app.base
 from agora import Agora, setup_logging
-from gunicorn.six import iteritems
 
 from agora_graphql.server import build
+from agora_graphql.server.app import number_of_workers, Application
 
 __author__ = 'Fernando Serena'
 
@@ -40,30 +38,6 @@ DATA_CACHE_ID = os.environ.get('DATA_CACHE_ID', 6)
 DATA_CACHE_GRAPH_LIMIT = os.environ.get('DATA_CACHE_GRAPH_LIMIT', 10000)
 
 setup_logging(LOG_LEVEL)
-
-
-def number_of_workers():
-    return (multiprocessing.cpu_count() * 2) + 1
-
-
-class StandaloneApplication(gunicorn.app.base.BaseApplication):
-    def init(self, parser, opts, args):
-        pass
-
-    def __init__(self, app, options=None):
-        self.options = options or {}
-        self.application = app
-        super(StandaloneApplication, self).__init__()
-
-    def load_config(self):
-        config = dict([(key, value) for key, value in iteritems(self.options)
-                       if key in self.cfg.settings and value is not None])
-        for key, value in iteritems(config):
-            self.cfg.set(key.lower(), value)
-
-    def load(self):
-        return self.application
-
 
 if __name__ == '__main__':
     graphql_config = {
@@ -99,7 +73,7 @@ if __name__ == '__main__':
             'errorlog': '-',
             'accesslog': '-'
         }
-        StandaloneApplication(app, options).run()
+        Application(app, options).run()
     except (KeyboardInterrupt, SystemExit, SystemError):
         pass
     finally:
