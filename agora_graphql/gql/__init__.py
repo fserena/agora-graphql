@@ -46,7 +46,7 @@ class GraphQLProcessor(object):
         self.__executor = AgoraExecutor(gateway)
 
         if not data_gw_cache:
-            data_gw_cache = {'max_age_seconds': 300, 'max_len': 1000}
+            data_gw_cache = {'max_age_seconds': 300, 'max_len': 100000}
 
         self.expiring_dict = ExpiringDict(**data_gw_cache)
         middleware = AgoraMiddleware(gateway, data_gw_cache=self.expiring_dict, **kwargs)
