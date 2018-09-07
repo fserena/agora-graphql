@@ -20,6 +20,7 @@ import traceback
 from threading import Lock
 
 from agora.engine.plan.agp import extend_uri
+from concurrent.futures import ThreadPoolExecutor
 from graphql import GraphQLNonNull, GraphQLList, GraphQLScalarType, GraphQLObjectType, GraphQLInterfaceType, \
     GraphQLUnionType
 from graphql.language.ast import InlineFragment
@@ -34,13 +35,16 @@ _lock = Lock()
 
 log = logging.getLogger('agora.gql.middleware')
 
+lock = Lock()
+
+tpool = ThreadPoolExecutor(max_workers=2)
+
 
 def load_resource(info, uri):
     uri = URIRef(uri)
     try:
         g, headers = info.context['load_fn'](uri)
     except Exception:
-        traceback.print_exc()
         g = Graph()
 
     return g
@@ -59,7 +63,9 @@ def objects(cache, info, elm, predicate):
     pred_key = predicate.toPython()
     with lock:
         if elm_key not in cache:
-            cache[elm_key] = {'_g': load_resource(info, elm)}
+            future = tpool.submit(load_resource, info, elm)
+            g = future.result()
+            cache[elm_key] = {'_g': g}
         if pred_key not in cache[elm_key]:
             if elm.startswith('_'):
                 elm = BNode(elm)
@@ -111,7 +117,9 @@ class AgoraMiddleware(object):
         lock = uri_lock(item, info)
         with lock:
             if item not in self.data_gw_cache:
-                self.data_gw_cache[item] = {'_g': load_resource(info, item)}
+                future = tpool.submit(load_resource, info, item)
+                g = future.result()
+                self.data_gw_cache[item] = {'_g': g}
             if 'type' not in self.data_gw_cache[item]:
                 g = self.data_gw_cache[item]['_g']
                 types = g.objects(URIRef(item), RDF.type)
@@ -153,6 +161,7 @@ class AgoraMiddleware(object):
 
         fountain = info.context['fountain']
 
+        log.debug(u'Resolve: {}'.format(root))
         try:
 
             non_nullable = isinstance(info.return_type, GraphQLNonNull)
@@ -197,7 +206,6 @@ class AgoraMiddleware(object):
                             prop_uri = URIRef(extend_uri(alias_prop, fountain.prefixes))
                             try:
                                 value = objects(self.data_gw_cache, info, root, prop_uri).pop()
-
                                 return value
                             except IndexError as e:
                                 if non_nullable:
