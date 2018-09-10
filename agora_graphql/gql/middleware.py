@@ -37,7 +37,7 @@ log = logging.getLogger('agora.gql.middleware')
 
 lock = Lock()
 
-tpool = ThreadPoolExecutor(max_workers=2)
+tpool = ThreadPoolExecutor(max_workers=8)
 
 
 def load_resource(info, uri):
