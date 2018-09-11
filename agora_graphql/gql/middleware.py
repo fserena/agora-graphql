@@ -43,6 +43,7 @@ tpool = ThreadPoolExecutor(max_workers=8)
 def load_resource(info, uri):
     uri = URIRef(uri)
     try:
+        log.debug(u'Pulling {}'.format(uri))
         g, headers = info.context['load_fn'](uri)
     except Exception:
         g = Graph()
@@ -72,6 +73,7 @@ def objects(cache, info, elm, predicate):
             else:
                 elm = URIRef(elm)
 
+            log.debug(u'Querying {} for {}'.format(elm, predicate))
             res = map(lambda o: o.toPython(), cache[elm_key]['_g'].objects(elm, URIRef(predicate)))
             cache[elm_key][pred_key] = res[:]
 
@@ -161,7 +163,6 @@ class AgoraMiddleware(object):
 
         fountain = info.context['fountain']
 
-        log.debug(u'Resolve: {}'.format(root))
         try:
 
             non_nullable = isinstance(info.return_type, GraphQLNonNull)
@@ -172,6 +173,8 @@ class AgoraMiddleware(object):
 
             if isinstance(return_type, GraphQLList):
                 if not root:
+                    log.debug(u'Gathering seeds...')
+
                     data_graph_kwargs = args.copy()
                     data_graph_kwargs.update(self.settings)
                     dg = data_graph(info.context['query'], self.gateway, data_gw_cache=self.data_gw_cache,
