@@ -19,18 +19,19 @@
 import traceback
 
 from agora import Wrapper
+from graphql.execution.executors.sync import SyncExecutor
 from graphql.execution.executors.thread import ThreadExecutor
 from rdflib import ConjunctiveGraph
 
 __author__ = 'Fernando Serena'
 
 
-class AgoraExecutor(ThreadExecutor):
+class AgoraExecutor(SyncExecutor):
     def __init__(self, gateway):
-        super(AgoraExecutor, self).__init__(pool=False)
+        super(AgoraExecutor, self).__init__()
         self.gateway = gateway
 
-    def execute_in_thread(self, fn, *args, **kwargs):
+    def execute(self, fn, *args, **kwargs):
         info = args[1]
 
         try:
@@ -43,4 +44,4 @@ class AgoraExecutor(ThreadExecutor):
 
         except Exception as e:
             traceback.print_exc()
-        return super(AgoraExecutor, self).execute_in_thread(fn, *args, **kwargs)
+        return super(AgoraExecutor, self).execute(fn, *args, **kwargs)
