@@ -72,7 +72,7 @@ class DataGraph(object):
 
         if data_gw_cache is None or dg.__gql_query not in data_gw_cache:
             data_gw = dg.__gateway.data(dg.__sparql_query, serverless=True, static_fountain=True,
-                                        server_name=kwargs.get('server_name', None), port=kwargs.get('port', None),
+                                        host=kwargs.get('host', None), port=kwargs.get('port', None),
                                         base=kwargs.get('base', 'store'))
         else:
             data_gw = data_gw_cache[dg.__gql_query]
